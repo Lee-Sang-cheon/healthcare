@@ -1,26 +1,13 @@
+import { squatModule } from './squat';
+import type { ExerciseMeta, ExerciseModule } from './types';
+
 /**
  * Single source of truth for which exercises the app supports.
- * V1 MVP ships with squat only — everything else lives behind `enabled: false`.
+ * V1 MVP ships with squat only — disabled placeholders live as plain
+ * {@link ExerciseMeta}s until their real modules ship.
  */
 
-export type CameraAngle = 'side' | 'front';
-
-export type ExerciseMeta = {
-  id: string;
-  name: string;
-  shortDescription: string;
-  primaryCameraAngle: CameraAngle;
-  enabled: boolean;
-};
-
-export const exercises: ExerciseMeta[] = [
-  {
-    id: 'squat',
-    name: '스쿼트',
-    shortDescription: '깊이와 무릎 정렬을 측면 카메라로 분석합니다.',
-    primaryCameraAngle: 'side',
-    enabled: true,
-  },
+const placeholderMetas: ExerciseMeta[] = [
   {
     id: 'deadlift',
     name: '데드리프트',
@@ -37,6 +24,27 @@ export const exercises: ExerciseMeta[] = [
   },
 ];
 
-export function getExercise(id: string): ExerciseMeta | undefined {
+const modules: ExerciseModule[] = [squatModule];
+
+/** Metadata for catalog screens (enabled + disabled, in display order). */
+export const exercises: ExerciseMeta[] = [
+  ...modules.map((m) => m.meta),
+  ...placeholderMetas,
+];
+
+/** Look up a single exercise's metadata. */
+export function getExercise(id: string | undefined | null): ExerciseMeta | undefined {
+  if (!id) return undefined;
   return exercises.find((e) => e.id === id);
 }
+
+/**
+ * Get the full {@link ExerciseModule} for an *enabled* exercise. Returns
+ * undefined for disabled placeholders so callers must handle that case.
+ */
+export function getExerciseModule(id: string | undefined | null): ExerciseModule | undefined {
+  if (!id) return undefined;
+  return modules.find((m) => m.meta.id === id);
+}
+
+export type { CameraAngle, ExerciseMeta, ExerciseModule, ExerciseRuntime } from './types';

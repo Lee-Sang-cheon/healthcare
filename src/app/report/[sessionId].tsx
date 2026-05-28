@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { getExercise } from '@/features/exercises/registry';
-import { getSessionSummary, type SessionSummary } from '@/features/sessions/sessionApi';
+import { sessionRepository, type SessionSummary } from '@/features/sessions';
 import { useTheme } from '@/hooks/use-theme';
 import type { FormIssue } from '@/lib/supabase/types';
 
@@ -30,7 +30,7 @@ export default function ReportScreen() {
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
-    getSessionSummary(sessionId)
+    sessionRepository.getSummary(sessionId)
       .then((data) => {
         if (!cancelled) setSummary(data);
       })

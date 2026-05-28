@@ -8,13 +8,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
-import { getCalibration, type SquatCalibration } from '@/features/calibration/calibrationApi';
-import { getExercise } from '@/features/exercises/registry';
-import { useSquatSession } from '@/features/exercises/squat/useSquatSession';
+import { getExerciseModule } from '@/features/exercises/registry';
+import type { ExerciseModule } from '@/features/exercises/types';
 import type { PoseFrame } from '@/features/pose/keypoints';
 import { PoseCameraView } from '@/features/pose/PoseCameraView';
 import { SkeletonOverlay } from '@/features/pose/SkeletonOverlay';
-import { finishSession, startSession } from '@/features/sessions/sessionApi';
+import { finishWorkout, startWorkout, type WorkoutContext } from '@/features/workout/useCases';
 import { useTheme } from '@/hooks/use-theme';
 
 /** Overlay re-render cadence (ms). Analyzer still runs at full camera fps. */
@@ -22,27 +21,57 @@ const OVERLAY_THROTTLE_MS = 66;
 
 export default function WorkoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const ex = getExercise(id);
+  const mod = getExerciseModule(id);
+  const theme = useTheme();
+
+  if (!mod) {
+    return (
+      <View style={[styles.fallback, { backgroundColor: theme.background }]}>
+        <Stack.Screen options={{ headerShown: true, title: '오류' }} />
+        <ThemedText type="body">알 수 없는 운동입니다.</ThemedText>
+      </View>
+    );
+  }
+
+  // `mod` doesn't change while this screen is mounted (driven by route param),
+  // so calling hooks inside ActiveWorkout below is safe.
+  return <ActiveWorkout mod={mod} />;
+}
+
+function ActiveWorkout({ mod }: { mod: ExerciseModule }) {
   const router = useRouter();
   const theme = useTheme();
-  const [calibration, setCalibration] = useState<SquatCalibration | null>(null);
-  const { state, onPose, getAllReps } = useSquatSession({ calibration });
+  const [ctx, setCtx] = useState<WorkoutContext | null>(null);
+  const { state, onPose, getAllReps } = mod.useRuntime({
+    calibration: ctx?.calibration ?? null,
+  });
   const [overlayPose, setOverlayPose] = useState<PoseFrame | null>(null);
-  const [persistIds, setPersistIds] = useState<{ sessionId: string; setId: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const lastOverlayTs = useRef(0);
 
+  useKeepAwake('workout');
+
+  useEffect(() => {
+    // Squat is best filmed landscape from the side.
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => undefined);
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => undefined);
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    getCalibration()
-      .then((c) => {
-        if (!cancelled && c.squat) setCalibration(c.squat);
+    startWorkout(mod.meta.id)
+      .then((next) => {
+        if (!cancelled) setCtx(next);
       })
-      .catch((err) => console.warn('getCalibration failed', err));
+      .catch((err) => {
+        console.warn('startWorkout failed; workout will run without saving.', err);
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mod.meta.id]);
 
   const handlePose = useCallback(
     (pose: PoseFrame) => {
@@ -56,34 +85,9 @@ export default function WorkoutScreen() {
     [onPose],
   );
 
-  useKeepAwake('workout');
-
-  useEffect(() => {
-    // Squat is best filmed landscape from the side.
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => undefined);
-    return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => undefined);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!ex) return;
-    let cancelled = false;
-    startSession(ex.id)
-      .then((ids) => {
-        if (!cancelled) setPersistIds(ids);
-      })
-      .catch((err) => {
-        console.warn('startSession failed; workout will run without saving.', err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [ex]);
-
   const handleEnd = useCallback(async () => {
     if (saving) return;
-    if (!persistIds) {
+    if (!ctx) {
       router.replace('/');
       return;
     }
@@ -95,13 +99,13 @@ export default function WorkoutScreen() {
       durationMs: r.durationMs,
     }));
     try {
-      await finishSession(persistIds.sessionId, persistIds.setId, reps);
-      router.replace({ pathname: '/report/[sessionId]', params: { sessionId: persistIds.sessionId } });
+      await finishWorkout(ctx, reps);
+      router.replace({ pathname: '/report/[sessionId]', params: { sessionId: ctx.sessionId } });
     } catch (err) {
-      console.warn('finishSession failed', err);
+      console.warn('finishWorkout failed', err);
       router.replace('/');
     }
-  }, [getAllReps, persistIds, router, saving]);
+  }, [ctx, getAllReps, router, saving]);
 
   const bandColor =
     state.formColor === 'good'
@@ -110,12 +114,13 @@ export default function WorkoutScreen() {
       ? theme.formWarn
       : theme.formDanger;
 
+  const issueLabel = state.lastIssue ? mod.issueLabels[state.lastIssue] : null;
+
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <PoseCameraView active={true} onPose={handlePose} />
-
       <SkeletonOverlay pose={overlayPose} color={bandColor} />
 
       {/* Form-status border band — sits on top of camera feed */}
@@ -125,7 +130,7 @@ export default function WorkoutScreen() {
         <View style={styles.topBar}>
           <ThemedView style={[styles.chip, { backgroundColor: theme.background + 'CC' }]}>
             <ThemedText type="caption" themeColor="textSecondary">
-              {ex?.name ?? '운동'} · 1세트
+              {mod.meta.name} · 1세트
             </ThemedText>
           </ThemedView>
           <Pressable
@@ -144,9 +149,9 @@ export default function WorkoutScreen() {
         <View style={styles.center}>
           <ThemedText type="caption" themeColor="textSecondary">REPS</ThemedText>
           <ThemedText type="display">{state.reps}</ThemedText>
-          {state.lastIssue && (
+          {issueLabel && (
             <ThemedText type="bodyEmphasis" themeColor="formWarn">
-              {ISSUE_LABEL[state.lastIssue]}
+              {issueLabel}
             </ThemedText>
           )}
         </View>
@@ -157,17 +162,14 @@ export default function WorkoutScreen() {
   );
 }
 
-const ISSUE_LABEL: Record<string, string> = {
-  knee_valgus: '무릎 안쪽 모임',
-  forward_lean: '상체 숙임',
-  shallow_depth: '얕은 깊이',
-  asymmetry: '좌우 비대칭',
-  knee_varus: '무릎 벌어짐',
-  tempo_too_fast: '너무 빠름',
-};
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
+  fallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.four,
+  },
   safe: {
     flex: 1,
     paddingHorizontal: Spacing.four,
