@@ -40,8 +40,9 @@ export function useSquatSession(options: UseSquatSessionOptions = {}) {
   const allRepsRef = useRef<RepResult[]>([]);
 
   const thresholds = useMemo(
-    () => thresholdsFromCalibration(calibration?.maxKneeAngle),
-    [calibration?.maxKneeAngle],
+    () => thresholdsFromCalibration(calibration ?? undefined),
+    // recordedAt changes on every save → cheap way to invalidate on any field change.
+    [calibration?.recordedAt],
   );
 
   const analyzer = useMemo(

@@ -54,17 +54,85 @@ export const SquatThresholds = {
 export type SquatThresholdSet = { -readonly [K in keyof typeof SquatThresholds]: number };
 
 /**
- * Derive a per-user threshold set from personal calibration. The only knob
- * we currently personalize is `shallowDepthBelow`: anything shallower than
- * `personalMax + 15°` counts as a shallow rep.
+ * Reasonable allowed deviation from a user's standing baseline before we
+ * call it a fault. Tuned for 홈트 초보자 — generous enough to not nag
+ * users with unusual neutral posture.
  */
-export function thresholdsFromCalibration(maxKneeAngle: number | undefined): SquatThresholdSet {
+const BASELINE_OFFSETS = {
+  /** °C of additional trunk tilt over the user's neutral. */
+  trunkLean: 25,
+  /** °C of additional left-right knee angle difference. */
+  asymmetry: 12,
+  /** Unitless cave index increment over neutral. */
+  kneeCave: 0.05,
+  /** ° shallower than the user's deepest squat that still counts as good depth. */
+  shallowDepth: 15,
+} as const;
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+interface CalibrationInput {
+  /** Smallest knee angle ever reached (deepest squat). */
+  maxKneeAngle?: number;
+  /** Knee angle while standing relaxed. */
+  minKneeAngle?: number;
+  neutralTrunkTilt?: number;
+  neutralAsymmetry?: number;
+  neutralKneeCaveIndex?: number;
+  /** (leg length) / (torso length) — long femurs need more lean tolerance. */
+  femurTorsoRatio?: number;
+}
+
+/**
+ * Derive a per-user threshold set from personal calibration. Each threshold
+ * collapses to the population default when the corresponding baseline field
+ * is missing, so older calibrations (and no calibration) still work.
+ */
+export function thresholdsFromCalibration(cal: CalibrationInput | undefined): SquatThresholdSet {
   const out: SquatThresholdSet = { ...SquatThresholds };
-  if (maxKneeAngle != null && Number.isFinite(maxKneeAngle)) {
-    // Clamp so the bar never lands above standing-detection or below kneeBottom.
-    const candidate = maxKneeAngle + 15;
-    out.shallowDepthBelow = Math.min(140, Math.max(SquatThresholds.kneeBottom + 5, candidate));
+  if (!cal) return out;
+
+  // Standing knee angle → phase transition into 'standing'.
+  if (cal.minKneeAngle != null && Number.isFinite(cal.minKneeAngle)) {
+    out.kneeStanding = clamp(cal.minKneeAngle - 5, 140, 178);
   }
+
+  // Deepest squat → both phase 'bottom' entry and shallow scoring threshold.
+  if (cal.maxKneeAngle != null && Number.isFinite(cal.maxKneeAngle)) {
+    out.kneeBottom = clamp(cal.maxKneeAngle + 10, 60, 130);
+    out.shallowDepthBelow = clamp(
+      cal.maxKneeAngle + BASELINE_OFFSETS.shallowDepth,
+      out.kneeBottom + 5,
+      140,
+    );
+  }
+
+  // Trunk tilt — deviation from neutral, with extra leeway for long-femur folks.
+  if (cal.neutralTrunkTilt != null && Number.isFinite(cal.neutralTrunkTilt)) {
+    // femurTorsoRatio of 1.0 ≈ population average. Each 0.1 above adds 1.5° tolerance.
+    const ratio = cal.femurTorsoRatio ?? 1.0;
+    const ratioBonus = clamp((ratio - 1.0) * 15, -5, 10);
+    out.forwardLeanAbove = clamp(
+      cal.neutralTrunkTilt + BASELINE_OFFSETS.trunkLean + ratioBonus,
+      25,
+      75,
+    );
+  }
+
+  // Left/right knee angle difference — deviation from natural neutral.
+  if (cal.neutralAsymmetry != null && Number.isFinite(cal.neutralAsymmetry)) {
+    out.asymmetryAbove = clamp(cal.neutralAsymmetry + BASELINE_OFFSETS.asymmetry, 8, 30);
+  }
+
+  // Knee cave / Q-angle proxy — deviation from baseline tracking.
+  if (cal.neutralKneeCaveIndex != null && Number.isFinite(cal.neutralKneeCaveIndex)) {
+    out.kneeCaveAbove = clamp(
+      cal.neutralKneeCaveIndex + BASELINE_OFFSETS.kneeCave,
+      0.03,
+      0.2,
+    );
+  }
+
   return out;
 }
 
