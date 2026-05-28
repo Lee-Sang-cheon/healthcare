@@ -5,6 +5,7 @@ import {
   scoreRep,
   SquatThresholds,
   type SquatMetrics,
+  type SquatThresholdSet,
 } from './rules';
 import type { PoseFrame } from '@/features/pose/keypoints';
 import type { FormIssue } from '@/lib/supabase/types';
@@ -38,6 +39,11 @@ export interface AnalyzerOptions {
   bottomHoldFrames?: number;
   /** Per-issue cooldown for `onIssue`, in ms. */
   issueCooldownMs?: number;
+  /**
+   * Per-user threshold overrides. Anything omitted falls back to {@link SquatThresholds}.
+   * Typically derived from `profiles.calibration` via `thresholdsFromCalibration`.
+   */
+  thresholds?: SquatThresholdSet;
 }
 
 interface InternalState {
@@ -53,6 +59,7 @@ interface InternalState {
 export function createSquatAnalyzer(callbacks: AnalyzerCallbacks = {}, options: AnalyzerOptions = {}) {
   const bottomHoldFrames = options.bottomHoldFrames ?? 6;
   const issueCooldownMs = options.issueCooldownMs ?? 4000;
+  const thresholds: SquatThresholdSet = options.thresholds ?? { ...SquatThresholds };
 
   const state: InternalState = {
     phase: 'standing',
@@ -93,7 +100,9 @@ export function createSquatAnalyzer(callbacks: AnalyzerCallbacks = {}, options: 
 
   function maybeEmitIssue(metrics: SquatMetrics, nowMs: number) {
     if (!callbacks.onIssue) return;
-    const issues = detectRepIssues(metrics).sort((a, b) => IssueSeverity[a] - IssueSeverity[b]);
+    const issues = detectRepIssues(metrics, thresholds).sort(
+      (a, b) => IssueSeverity[a] - IssueSeverity[b],
+    );
     for (const issue of issues) {
       const last = state.lastIssueTs.get(issue) ?? 0;
       if (nowMs - last >= issueCooldownMs) {
@@ -110,8 +119,8 @@ export function createSquatAnalyzer(callbacks: AnalyzerCallbacks = {}, options: 
     const repNumber = state.repNumber + 1;
     const result: RepResult = {
       repNumber,
-      formScore: scoreRep(state.worst),
-      issues: detectRepIssues(state.worst),
+      formScore: scoreRep(state.worst, thresholds),
+      issues: detectRepIssues(state.worst, thresholds),
       durationMs: nowMs - state.repStartTs,
       worstMetrics: state.worst,
     };
@@ -139,7 +148,7 @@ export function createSquatAnalyzer(callbacks: AnalyzerCallbacks = {}, options: 
 
     switch (state.phase) {
       case 'standing': {
-        if (knee < SquatThresholds.kneeStanding - 5) {
+        if (knee < thresholds.kneeStanding - 5) {
           state.phase = 'descending';
           state.repStartTs = nowMs;
           state.framesAtBottom = 0;
@@ -148,18 +157,18 @@ export function createSquatAnalyzer(callbacks: AnalyzerCallbacks = {}, options: 
         break;
       }
       case 'descending': {
-        if (knee <= SquatThresholds.kneeBottom) {
+        if (knee <= thresholds.kneeBottom) {
           state.framesAtBottom += 1;
           if (state.framesAtBottom >= bottomHoldFrames) state.phase = 'bottom';
         }
         break;
       }
       case 'bottom': {
-        if (knee > SquatThresholds.kneeBottom + 10) state.phase = 'ascending';
+        if (knee > thresholds.kneeBottom + 10) state.phase = 'ascending';
         break;
       }
       case 'ascending': {
-        if (knee >= SquatThresholds.kneeStanding) {
+        if (knee >= thresholds.kneeStanding) {
           completeRep(nowMs);
           state.phase = 'standing';
         }

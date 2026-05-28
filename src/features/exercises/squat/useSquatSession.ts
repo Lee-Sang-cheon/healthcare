@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import * as Speech from 'expo-speech';
 
+import type { SquatCalibration } from '@/features/calibration/calibrationApi';
 import type { PoseFrame } from '@/features/pose/keypoints';
 import type { FormIssue } from '@/lib/supabase/types';
 
+import { thresholdsFromCalibration } from './rules';
 import type { RepResult } from './state-machine';
 import { createSquatAnalyzer } from './state-machine';
 
@@ -26,11 +28,17 @@ export interface SquatSessionState {
   formColor: 'good' | 'warn' | 'danger';
 }
 
+export interface UseSquatSessionOptions {
+  /** Optional personal calibration. If provided, `shallowDepthBelow` is computed from it. */
+  calibration?: SquatCalibration | null;
+}
+
 /**
  * Top-level hook glueing the pose stream → analyzer → React state and TTS.
  * `onPose` is what gets passed to the camera frame processor.
  */
-export function useSquatSession() {
+export function useSquatSession(options: UseSquatSessionOptions = {}) {
+  const { calibration } = options;
   const [reps, setReps] = useState(0);
   const [lastRep, setLastRep] = useState<RepResult | null>(null);
   const [lastIssue, setLastIssue] = useState<FormIssue | null>(null);
@@ -40,25 +48,36 @@ export function useSquatSession() {
   /** Every completed rep this mount has seen. Read via `getAllReps()` at end-of-session. */
   const allRepsRef = useRef<RepResult[]>([]);
 
+  const thresholds = useMemo(
+    () => thresholdsFromCalibration(calibration?.maxKneeAngle),
+    [calibration?.maxKneeAngle],
+  );
+
   const analyzer = useMemo(
     () =>
-      createSquatAnalyzer({
-        onRep: (result) => {
-          allRepsRef.current.push(result);
-          setLastRep(result);
-          setReps(result.repNumber);
-          setFormColor(result.formScore >= 80 ? 'good' : result.formScore >= 60 ? 'warn' : 'danger');
+      createSquatAnalyzer(
+        {
+          onRep: (result) => {
+            allRepsRef.current.push(result);
+            setLastRep(result);
+            setReps(result.repNumber);
+            setFormColor(
+              result.formScore >= 80 ? 'good' : result.formScore >= 60 ? 'warn' : 'danger',
+            );
+          },
+          onIssue: (issue) => {
+            setLastIssue(issue);
+            // Voice with anti-spam: don't repeat the exact same issue within 2.5s.
+            const now = Date.now();
+            if (lastSpokenRef.current.issue === issue && now - lastSpokenRef.current.at < 2500)
+              return;
+            lastSpokenRef.current = { issue, at: now };
+            Speech.speak(ISSUE_VOICE[issue], { language: 'ko-KR', pitch: 1.0, rate: 1.0 });
+          },
         },
-        onIssue: (issue) => {
-          setLastIssue(issue);
-          // Voice with anti-spam: don't repeat the exact same issue within 2.5s.
-          const now = Date.now();
-          if (lastSpokenRef.current.issue === issue && now - lastSpokenRef.current.at < 2500) return;
-          lastSpokenRef.current = { issue, at: now };
-          Speech.speak(ISSUE_VOICE[issue], { language: 'ko-KR', pitch: 1.0, rate: 1.0 });
-        },
-      }),
-    [],
+        { thresholds },
+      ),
+    [thresholds],
   );
 
   const onPose = useCallback(

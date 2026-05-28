@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
+import { getCalibration, type SquatCalibration } from '@/features/calibration/calibrationApi';
 import { getExercise } from '@/features/exercises/registry';
 import { useSquatSession } from '@/features/exercises/squat/useSquatSession';
 import type { PoseFrame } from '@/features/pose/keypoints';
@@ -24,11 +25,24 @@ export default function WorkoutScreen() {
   const ex = getExercise(id);
   const router = useRouter();
   const theme = useTheme();
-  const { state, onPose, getAllReps } = useSquatSession();
+  const [calibration, setCalibration] = useState<SquatCalibration | null>(null);
+  const { state, onPose, getAllReps } = useSquatSession({ calibration });
   const [overlayPose, setOverlayPose] = useState<PoseFrame | null>(null);
   const [persistIds, setPersistIds] = useState<{ sessionId: string; setId: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const lastOverlayTs = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCalibration()
+      .then((c) => {
+        if (!cancelled && c.squat) setCalibration(c.squat);
+      })
+      .catch((err) => console.warn('getCalibration failed', err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handlePose = useCallback(
     (pose: PoseFrame) => {

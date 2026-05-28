@@ -23,7 +23,8 @@
       "permissions": [
         "android.permission.CAMERA"
       ],
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.health"
     },
     "web": {
       "output": "static",
@@ -55,6 +56,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a59e81ad-209b-418f-92bd-1c8104bb97f3"
+      }
+    },
+    "owner": "leesc1107"
   }
 }

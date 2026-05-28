@@ -49,6 +49,24 @@ export const SquatThresholds = {
   kneeCaveAbove: 0.08,
 } as const;
 
+/** Mutable view used by the analyzer once any per-user overrides are merged in. */
+export type SquatThresholdSet = { -readonly [K in keyof typeof SquatThresholds]: number };
+
+/**
+ * Derive a per-user threshold set from personal calibration. The only knob
+ * we currently personalize is `shallowDepthBelow`: anything shallower than
+ * `personalMax + 15°` counts as a shallow rep.
+ */
+export function thresholdsFromCalibration(maxKneeAngle: number | undefined): SquatThresholdSet {
+  const out: SquatThresholdSet = { ...SquatThresholds };
+  if (maxKneeAngle != null && Number.isFinite(maxKneeAngle)) {
+    // Clamp so the bar never lands above standing-detection or below kneeBottom.
+    const candidate = maxKneeAngle + 15;
+    out.shallowDepthBelow = Math.min(140, Math.max(SquatThresholds.kneeBottom + 5, candidate));
+  }
+  return out;
+}
+
 const FALLBACK: SquatMetrics = {
   reliable: false,
   kneeAngle: 180,
@@ -102,35 +120,41 @@ export function analyzeSquatFrame(pose: PoseFrame): SquatMetrics {
  * 0..100 form score from a rep's worst-along-time metrics.
  * Deductions are gentle — a beginner reaching 110° depth still scores ~75.
  */
-export function scoreRep(worst: SquatMetrics): number {
+export function scoreRep(
+  worst: SquatMetrics,
+  thresholds: SquatThresholdSet = SquatThresholds,
+): number {
   if (!worst.reliable) return 0;
   let score = 100;
 
-  if (worst.kneeAngle > SquatThresholds.shallowDepthBelow) {
-    const over = worst.kneeAngle - SquatThresholds.shallowDepthBelow;
+  if (worst.kneeAngle > thresholds.shallowDepthBelow) {
+    const over = worst.kneeAngle - thresholds.shallowDepthBelow;
     score -= Math.min(35, over * 1.2);
   }
-  if (worst.trunkTilt > SquatThresholds.forwardLeanAbove) {
-    const over = worst.trunkTilt - SquatThresholds.forwardLeanAbove;
+  if (worst.trunkTilt > thresholds.forwardLeanAbove) {
+    const over = worst.trunkTilt - thresholds.forwardLeanAbove;
     score -= Math.min(25, over * 1.0);
   }
-  if (worst.kneeAsymmetry > SquatThresholds.asymmetryAbove) {
-    score -= Math.min(15, (worst.kneeAsymmetry - SquatThresholds.asymmetryAbove) * 0.8);
+  if (worst.kneeAsymmetry > thresholds.asymmetryAbove) {
+    score -= Math.min(15, (worst.kneeAsymmetry - thresholds.asymmetryAbove) * 0.8);
   }
-  if (worst.kneeCaveIndex > SquatThresholds.kneeCaveAbove) {
-    score -= Math.min(25, (worst.kneeCaveIndex - SquatThresholds.kneeCaveAbove) * 200);
+  if (worst.kneeCaveIndex > thresholds.kneeCaveAbove) {
+    score -= Math.min(25, (worst.kneeCaveIndex - thresholds.kneeCaveAbove) * 200);
   }
 
   return Math.max(0, Math.round(score));
 }
 
-export function detectRepIssues(worst: SquatMetrics): FormIssue[] {
+export function detectRepIssues(
+  worst: SquatMetrics,
+  thresholds: SquatThresholdSet = SquatThresholds,
+): FormIssue[] {
   if (!worst.reliable) return [];
   const issues: FormIssue[] = [];
-  if (worst.kneeCaveIndex > SquatThresholds.kneeCaveAbove) issues.push('knee_valgus');
-  if (worst.trunkTilt > SquatThresholds.forwardLeanAbove) issues.push('forward_lean');
-  if (worst.kneeAngle > SquatThresholds.shallowDepthBelow) issues.push('shallow_depth');
-  if (worst.kneeAsymmetry > SquatThresholds.asymmetryAbove) issues.push('asymmetry');
+  if (worst.kneeCaveIndex > thresholds.kneeCaveAbove) issues.push('knee_valgus');
+  if (worst.trunkTilt > thresholds.forwardLeanAbove) issues.push('forward_lean');
+  if (worst.kneeAngle > thresholds.shallowDepthBelow) issues.push('shallow_depth');
+  if (worst.kneeAsymmetry > thresholds.asymmetryAbove) issues.push('asymmetry');
   return issues;
 }
 
