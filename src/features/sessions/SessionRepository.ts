@@ -1,9 +1,11 @@
-import type { FormIssue } from '@/lib/supabase/types';
-
 /**
  * Port for workout-session persistence. Swap implementations for offline
  * queues, test fakes, or alternative backends without touching screens or
  * domain logic.
+ *
+ * Issues are stored as plain `string[]` — the DB column is `text[]`, and
+ * each exercise module owns its own issue union (see {@link ExerciseModule}).
+ * This keeps the repository exercise-agnostic.
  */
 export interface SessionRepository {
   start(exerciseId: string): Promise<StartSessionResult>;
@@ -19,7 +21,7 @@ export interface StartSessionResult {
 export interface RepInput {
   repNumber: number;
   formScore: number;
-  issues: FormIssue[];
+  issues: string[];
   durationMs: number;
 }
 
@@ -37,14 +39,14 @@ export interface SessionSummary {
     set_number: number;
     reps: number;
     avg_form_score: number | null;
-    issues_detected: FormIssue[];
+    issues_detected: string[];
   }[];
   reps: {
     id: string;
     set_id: string;
     rep_number: number;
     form_score: number | null;
-    issues: FormIssue[];
+    issues: string[];
     duration_ms: number | null;
   }[];
 }

@@ -1,4 +1,6 @@
 import type { ExerciseModule } from '../types';
+
+import { SQUAT_ISSUE_LABELS, SQUAT_ISSUE_VOICE, type SquatIssue } from './issues';
 import { useSquatSession } from './useSquatSession';
 
 /**
@@ -6,7 +8,7 @@ import { useSquatSession } from './useSquatSession';
  * exercise means creating a sibling folder (e.g. `deadlift/`) with the same
  * shape and registering it in `exercises/registry.ts`.
  */
-export const squatModule: ExerciseModule = {
+export const squatModule: ExerciseModule<SquatIssue> = {
   meta: {
     id: 'squat',
     name: '스쿼트',
@@ -18,12 +20,8 @@ export const squatModule: ExerciseModule = {
     const { state, onPose, getAllReps } = useSquatSession({ calibration });
     return { state, onPose, getAllReps };
   },
-  issueLabels: {
-    knee_valgus: '무릎 안쪽 모임',
-    forward_lean: '상체 숙임',
-    shallow_depth: '얕은 깊이',
-    asymmetry: '좌우 비대칭',
-    knee_varus: '무릎 벌어짐',
-    tempo_too_fast: '너무 빠름',
-  },
+  issueLabels: SQUAT_ISSUE_LABELS,
+  voicePrompts: SQUAT_ISSUE_VOICE,
 };
+
+export type { SquatIssue } from './issues';

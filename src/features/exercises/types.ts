@@ -1,16 +1,13 @@
 import type { SquatCalibration } from '@/features/calibration/calibrationApi';
-import type { FormIssue } from '@/lib/supabase/types';
+import type { PoseFrame } from '@/features/pose/keypoints';
 
 /**
  * Cross-exercise contracts. Each exercise (squat, deadlift, pushup...) ships
  * an {@link ExerciseModule} so screens can stay exercise-agnostic.
  *
- * The flow:
- *   exercises/registry.ts → ExerciseModule → useRuntime() → ExerciseRuntime
- *
- * Screens render whatever the runtime exposes (reps, lastIssue, ...) and
- * forward camera frames to `onPose`. The exercise module owns its own rules,
- * scoring, voice prompts, and per-rep accumulation.
+ * Issue types are per-exercise — the module is generic over `TIssue extends
+ * string`. The DB persists issues as `text[]` so any module can flush its
+ * own union without schema changes.
  */
 
 export type CameraAngle = 'side' | 'front';
@@ -25,22 +22,25 @@ export interface ExerciseMeta {
 
 export type FormColor = 'good' | 'warn' | 'danger';
 
+/** Snapshot of a completed rep, exercise-agnostic shape. */
+export interface CompletedRep<TIssue extends string = string> {
+  repNumber: number;
+  formScore: number;
+  issues: TIssue[];
+  durationMs: number;
+}
+
 /** Shape returned by useRuntime(). */
-export interface ExerciseRuntime {
+export interface ExerciseRuntime<TIssue extends string = string> {
   state: {
     reps: number;
-    lastIssue: FormIssue | null;
+    lastIssue: TIssue | null;
     formColor: FormColor;
   };
   /** Frame processor callback — forward every PoseFrame here. */
-  onPose: (pose: import('@/features/pose/keypoints').PoseFrame) => void;
+  onPose: (pose: PoseFrame) => void;
   /** All completed reps this session, for end-of-session persistence. */
-  getAllReps: () => Array<{
-    repNumber: number;
-    formScore: number;
-    issues: FormIssue[];
-    durationMs: number;
-  }>;
+  getAllReps: () => CompletedRep<TIssue>[];
 }
 
 export interface ExerciseRuntimeOptions {
@@ -51,13 +51,15 @@ export interface ExerciseRuntimeOptions {
   calibration: SquatCalibration | null;
 }
 
-export interface ExerciseModule {
+export interface ExerciseModule<TIssue extends string = string> {
   meta: ExerciseMeta;
   /**
    * React hook returning the live analysis runtime. Must be stable in shape
    * — screens depend only on the {@link ExerciseRuntime} contract.
    */
-  useRuntime: (options: ExerciseRuntimeOptions) => ExerciseRuntime;
-  /** Human-readable per-issue labels, used by the live HUD. */
-  issueLabels: Partial<Record<FormIssue, string>>;
+  useRuntime: (options: ExerciseRuntimeOptions) => ExerciseRuntime<TIssue>;
+  /** Human-readable per-issue labels, used by the live HUD + report. */
+  issueLabels: Record<TIssue, string>;
+  /** Spoken prompts via expo-speech, keyed by issue. */
+  voicePrompts: Record<TIssue, string>;
 }

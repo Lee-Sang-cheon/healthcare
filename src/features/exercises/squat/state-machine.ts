@@ -8,7 +8,7 @@ import {
   type SquatThresholdSet,
 } from './rules';
 import type { PoseFrame } from '@/features/pose/keypoints';
-import type { FormIssue } from '@/lib/supabase/types';
+import type { SquatIssue } from './issues';
 
 /**
  * Rep state machine for squat. Walks STANDING → DESCENDING → BOTTOM → ASCENDING → STANDING (rep+1).
@@ -22,7 +22,7 @@ export type RepPhase = 'standing' | 'descending' | 'bottom' | 'ascending';
 export interface RepResult {
   repNumber: number;
   formScore: number;
-  issues: FormIssue[];
+  issues: SquatIssue[];
   durationMs: number;
   worstMetrics: SquatMetrics;
 }
@@ -31,7 +31,7 @@ export interface AnalyzerCallbacks {
   /** Fired once per completed rep (transition out of standing → through bottom → back to standing). */
   onRep?: (result: RepResult) => void;
   /** Fired any time an issue is detected during the descent. Cooldown per issue id (default 4s). */
-  onIssue?: (issue: FormIssue, metrics: SquatMetrics) => void;
+  onIssue?: (issue: SquatIssue, metrics: SquatMetrics) => void;
 }
 
 export interface AnalyzerOptions {
@@ -53,7 +53,7 @@ interface InternalState {
   framesAtBottom: number;
   /** Worst metrics seen during current rep. "Worst" = lowest score components, recomputed per-axis. */
   worst: SquatMetrics | null;
-  lastIssueTs: Map<FormIssue, number>;
+  lastIssueTs: Map<SquatIssue, number>;
 }
 
 export function createSquatAnalyzer(callbacks: AnalyzerCallbacks = {}, options: AnalyzerOptions = {}) {

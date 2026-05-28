@@ -7,14 +7,6 @@
 
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
-export type FormIssue =
-  | 'shallow_depth'
-  | 'knee_valgus'
-  | 'knee_varus'
-  | 'forward_lean'
-  | 'asymmetry'
-  | 'tempo_too_fast';
-
 export interface Database {
   public: {
     Tables: {
@@ -67,7 +59,7 @@ export interface Database {
           set_number: number;
           reps: number;
           avg_form_score: number | null;
-          issues_detected: FormIssue[];
+          issues_detected: string[];
           created_at: string;
         };
         Insert: {
@@ -76,7 +68,7 @@ export interface Database {
           set_number: number;
           reps?: number;
           avg_form_score?: number | null;
-          issues_detected?: FormIssue[];
+          issues_detected?: string[];
         };
         Update: Partial<Database['public']['Tables']['sets']['Insert']>;
         Relationships: [];
@@ -87,7 +79,7 @@ export interface Database {
           set_id: string;
           rep_number: number;
           form_score: number | null;
-          issues: FormIssue[];
+          issues: string[];
           duration_ms: number | null;
           keypoint_snapshot: Json | null;
           created_at: string;
@@ -97,7 +89,7 @@ export interface Database {
           set_id: string;
           rep_number: number;
           form_score?: number | null;
-          issues?: FormIssue[];
+          issues?: string[];
           duration_ms?: number | null;
           keypoint_snapshot?: Json | null;
         };

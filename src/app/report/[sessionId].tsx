@@ -6,19 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
-import { getExercise } from '@/features/exercises/registry';
+import { getExercise, getExerciseModule } from '@/features/exercises/registry';
 import { sessionRepository, type SessionSummary } from '@/features/sessions';
 import { useTheme } from '@/hooks/use-theme';
-import type { FormIssue } from '@/lib/supabase/types';
-
-const ISSUE_LABEL: Record<FormIssue, string> = {
-  knee_valgus: '무릎 안쪽 모임',
-  forward_lean: '상체 숙임',
-  shallow_depth: '얕은 깊이',
-  asymmetry: '좌우 비대칭',
-  knee_varus: '무릎 벌어짐',
-  tempo_too_fast: '너무 빠름',
-};
 
 export default function ReportScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
@@ -79,11 +69,12 @@ export default function ReportScreen() {
 function ReportBody({ summary }: { summary: SessionSummary }) {
   const theme = useTheme();
   const ex = getExercise(summary.session.exercise_type);
+  const mod = getExerciseModule(summary.session.exercise_type);
   const startedAt = new Date(summary.session.started_at);
   const endedAt = summary.session.ended_at ? new Date(summary.session.ended_at) : null;
   const durationMin =
     endedAt != null ? Math.max(1, Math.round((endedAt.getTime() - startedAt.getTime()) / 60000)) : null;
-  const issueSet = new Set<FormIssue>();
+  const issueSet = new Set<string>();
   for (const set of summary.sets) for (const i of set.issues_detected) issueSet.add(i);
   const issues = Array.from(issueSet);
 
@@ -112,7 +103,9 @@ function ReportBody({ summary }: { summary: SessionSummary }) {
           issues.map((i) => (
             <View key={i} style={styles.issueRow}>
               <View style={[styles.bullet, { backgroundColor: theme.formWarn }]} />
-              <ThemedText type="body">{ISSUE_LABEL[i] ?? i}</ThemedText>
+              <ThemedText type="body">
+                {(mod?.issueLabels as Record<string, string> | undefined)?.[i] ?? i}
+              </ThemedText>
             </View>
           ))
         )}

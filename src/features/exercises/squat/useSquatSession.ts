@@ -3,20 +3,11 @@ import * as Speech from 'expo-speech';
 
 import type { SquatCalibration } from '@/features/calibration/calibrationApi';
 import type { PoseFrame } from '@/features/pose/keypoints';
-import type { FormIssue } from '@/lib/supabase/types';
 
+import { SQUAT_ISSUE_VOICE, type SquatIssue } from './issues';
 import { thresholdsFromCalibration } from './rules';
 import type { RepResult } from './state-machine';
 import { createSquatAnalyzer } from './state-machine';
-
-const ISSUE_VOICE: Record<FormIssue, string> = {
-  knee_valgus: '무릎이 안쪽으로 모이고 있어요',
-  forward_lean: '상체가 너무 숙여졌습니다',
-  shallow_depth: '조금 더 깊게 앉아보세요',
-  asymmetry: '좌우 균형을 맞춰주세요',
-  knee_varus: '무릎이 바깥으로 벌어졌어요',
-  tempo_too_fast: '천천히, 통제된 속도로',
-};
 
 export type SquatPhase = 'standing' | 'descending' | 'bottom' | 'ascending';
 
@@ -24,7 +15,7 @@ export interface SquatSessionState {
   reps: number;
   lastRep: RepResult | null;
   /** Latest issue spoken — for HUD subtle text. */
-  lastIssue: FormIssue | null;
+  lastIssue: SquatIssue | null;
   formColor: 'good' | 'warn' | 'danger';
 }
 
@@ -41,10 +32,10 @@ export function useSquatSession(options: UseSquatSessionOptions = {}) {
   const { calibration } = options;
   const [reps, setReps] = useState(0);
   const [lastRep, setLastRep] = useState<RepResult | null>(null);
-  const [lastIssue, setLastIssue] = useState<FormIssue | null>(null);
+  const [lastIssue, setLastIssue] = useState<SquatIssue | null>(null);
   const [formColor, setFormColor] = useState<'good' | 'warn' | 'danger'>('good');
 
-  const lastSpokenRef = useRef<{ issue: FormIssue | null; at: number }>({ issue: null, at: 0 });
+  const lastSpokenRef = useRef<{ issue: SquatIssue | null; at: number }>({ issue: null, at: 0 });
   /** Every completed rep this mount has seen. Read via `getAllReps()` at end-of-session. */
   const allRepsRef = useRef<RepResult[]>([]);
 
@@ -72,7 +63,7 @@ export function useSquatSession(options: UseSquatSessionOptions = {}) {
             if (lastSpokenRef.current.issue === issue && now - lastSpokenRef.current.at < 2500)
               return;
             lastSpokenRef.current = { issue, at: now };
-            Speech.speak(ISSUE_VOICE[issue], { language: 'ko-KR', pitch: 1.0, rate: 1.0 });
+            Speech.speak(SQUAT_ISSUE_VOICE[issue], { language: 'ko-KR', pitch: 1.0, rate: 1.0 });
           },
         },
         { thresholds },

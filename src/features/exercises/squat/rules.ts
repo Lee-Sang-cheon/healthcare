@@ -1,6 +1,7 @@
 import { angleAt, angleFromVertical, midpoint } from '@/features/pose/geometry';
 import { jointsReliable, type JointName, type PoseFrame } from '@/features/pose/keypoints';
-import type { FormIssue } from '@/lib/supabase/types';
+
+import { SQUAT_ISSUE_SEVERITY, type SquatIssue } from './issues';
 
 /**
  * Stateless analysis of a single pose frame for squat form.
@@ -148,9 +149,9 @@ export function scoreRep(
 export function detectRepIssues(
   worst: SquatMetrics,
   thresholds: SquatThresholdSet = SquatThresholds,
-): FormIssue[] {
+): SquatIssue[] {
   if (!worst.reliable) return [];
-  const issues: FormIssue[] = [];
+  const issues: SquatIssue[] = [];
   if (worst.kneeCaveIndex > thresholds.kneeCaveAbove) issues.push('knee_valgus');
   if (worst.trunkTilt > thresholds.forwardLeanAbove) issues.push('forward_lean');
   if (worst.kneeAngle > thresholds.shallowDepthBelow) issues.push('shallow_depth');
@@ -158,12 +159,5 @@ export function detectRepIssues(
   return issues;
 }
 
-/** Severity ordering — first item should be voiced first. */
-export const IssueSeverity: Record<FormIssue, number> = {
-  knee_valgus: 1,
-  forward_lean: 2,
-  shallow_depth: 3,
-  asymmetry: 4,
-  knee_varus: 5,
-  tempo_too_fast: 6,
-};
+/** Re-export severity map so state-machine doesn't pull a sibling import. */
+export const IssueSeverity = SQUAT_ISSUE_SEVERITY;
