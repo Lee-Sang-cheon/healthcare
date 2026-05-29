@@ -6,16 +6,44 @@
  * Issues are stored as plain `string[]` — the DB column is `text[]`, and
  * each exercise module owns its own issue union (see {@link ExerciseModule}).
  * This keeps the repository exercise-agnostic.
+ *
+ * Multi-set flow:
+ *   start → {sessionId, setId, setNumber=1}
+ *   (reps...) flushSet(setId, reps)
+ *   startNextSet(sessionId, 1) → {setId, setNumber=2}
+ *   (reps...) flushSet(setId, reps)
+ *   closeSession(sessionId)  // aggregates over all sets
  */
 export interface SessionRepository {
   start(exerciseId: string): Promise<StartSessionResult>;
-  finish(sessionId: string, setId: string, reps: RepInput[]): Promise<void>;
+  startNextSet(sessionId: string, currentSetNumber: number): Promise<StartSetResult>;
+  /** Persist all reps for a set + roll up the set aggregates. Idempotent. */
+  flushSet(setId: string, reps: RepInput[]): Promise<void>;
+  /** Close the session — sets ended_at + aggregates from all sets in DB. */
+  closeSession(sessionId: string): Promise<void>;
   getSummary(sessionId: string): Promise<SessionSummary>;
+  /** Recent sessions for the signed-in user, newest first. */
+  listRecent(limit?: number): Promise<SessionListItem[]>;
+}
+
+export interface SessionListItem {
+  id: string;
+  exercise_type: string;
+  started_at: string;
+  ended_at: string | null;
+  total_reps: number;
+  avg_form_score: number | null;
 }
 
 export interface StartSessionResult {
   sessionId: string;
   setId: string;
+  setNumber: number;
+}
+
+export interface StartSetResult {
+  setId: string;
+  setNumber: number;
 }
 
 export interface RepInput {

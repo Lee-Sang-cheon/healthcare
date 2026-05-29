@@ -15,13 +15,13 @@ export const pushupModule: ExerciseModule<PushupIssue> = {
     // Pushup calibration is squat-shaped today (a single field). When we add
     // a real `cal.pushup` slice, swap this lookup; until then the module
     // simply ignores incoming calibration.
-    const { state, onPose, getAllReps } = usePushupSession({
+    const { state, onPose, getAllReps, reset } = usePushupSession({
       calibration: null,
     });
     // Suppress unused — `calibration` will be consumed once a pushup
     // calibration screen exists.
     void calibration;
-    return { state, onPose, getAllReps };
+    return { state, onPose, getAllReps, reset };
   },
   issueLabels: PUSHUP_ISSUE_LABELS,
   voicePrompts: PUSHUP_ISSUE_VOICE,

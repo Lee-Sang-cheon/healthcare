@@ -39,8 +39,10 @@ export interface ExerciseRuntime<TIssue extends string = string> {
   };
   /** Frame processor callback — forward every PoseFrame here. */
   onPose: (pose: PoseFrame) => void;
-  /** All completed reps this session, for end-of-session persistence. */
+  /** All completed reps this set, for end-of-set persistence. */
   getAllReps: () => CompletedRep<TIssue>[];
+  /** Clear the rep counter + accumulator. Used when starting a new set. */
+  reset: () => void;
 }
 
 export interface ExerciseRuntimeOptions {

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { RepScoreChart } from '@/components/rep-score-chart';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -78,6 +79,23 @@ function ReportBody({ summary }: { summary: SessionSummary }) {
   for (const set of summary.sets) for (const i of set.issues_detected) issueSet.add(i);
   const issues = Array.from(issueSet);
 
+  // Linearize reps across all sets in set/rep order for the chart.
+  const setOrder = new Map(summary.sets.map((s, i) => [s.id, i]));
+  const repsOrdered = [...summary.reps].sort((a, b) => {
+    const sa = setOrder.get(a.set_id) ?? 0;
+    const sb = setOrder.get(b.set_id) ?? 0;
+    if (sa !== sb) return sa - sb;
+    return a.rep_number - b.rep_number;
+  });
+  const repScores = repsOrdered.map((r) => r.form_score);
+  // Mark set boundaries (the rep index at which a new set begins).
+  const setBoundaries: number[] = [];
+  let acc = 0;
+  for (const s of summary.sets) {
+    if (acc > 0) setBoundaries.push(acc);
+    acc += s.reps ?? 0;
+  }
+
   return (
     <>
       <ThemedText type="caption" themeColor="textSecondary">
@@ -112,19 +130,28 @@ function ReportBody({ summary }: { summary: SessionSummary }) {
       </View>
 
       <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-        <ThemedText type="heading">렙별</ThemedText>
+        <ThemedText type="heading">렙별 폼</ThemedText>
         {summary.reps.length === 0 ? (
           <ThemedText type="body" themeColor="textSecondary">기록된 렙이 없습니다.</ThemedText>
         ) : (
-          summary.reps.map((r) => (
-            <View key={r.id} style={styles.repRow}>
-              <ThemedText type="bodyEmphasis">#{r.rep_number}</ThemedText>
-              <ThemedText type="body" themeColor="textSecondary">
-                {r.form_score != null ? `${r.form_score}점` : '—'}
-                {r.duration_ms != null ? ` · ${(r.duration_ms / 1000).toFixed(1)}s` : ''}
-              </ThemedText>
-            </View>
-          ))
+          <>
+            <RepScoreChart scores={repScores} setBoundaries={setBoundaries} />
+            <View style={{ height: Spacing.two }} />
+            {summary.sets.length > 1 && (
+              <View style={styles.setSummaries}>
+                {summary.sets.map((s) => (
+                  <View key={s.id} style={styles.setSummary}>
+                    <ThemedText type="caption" themeColor="textSecondary">
+                      {s.set_number}세트
+                    </ThemedText>
+                    <ThemedText type="bodyEmphasis">
+                      {s.reps}회{s.avg_form_score != null ? ` · ${Math.round(s.avg_form_score)}점` : ''}
+                    </ThemedText>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
         )}
       </View>
     </>
@@ -173,6 +200,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: Spacing.one,
+  },
+  setSummaries: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.three,
+  },
+  setSummary: {
+    gap: 2,
   },
   primary: {
     paddingVertical: Spacing.four,

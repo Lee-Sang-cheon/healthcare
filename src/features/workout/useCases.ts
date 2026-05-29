@@ -4,7 +4,8 @@ import { sessionRepository, type RepInput, type SessionRepository } from '@/feat
 
 /**
  * Use cases compose repositories + domain helpers into single calls that
- * mean something at the business level ("start a workout", "finish a workout").
+ * mean something at the business level ("start a workout", "advance to the
+ * next set", "finish a workout").
  *
  * Screens depend on these instead of orchestrating multiple effects.
  * Repository is injectable via the optional `repo` arg — tests pass an
@@ -14,6 +15,7 @@ import { sessionRepository, type RepInput, type SessionRepository } from '@/feat
 export interface WorkoutContext {
   sessionId: string;
   setId: string;
+  setNumber: number;
   /** Full calibration payload; modules pick their own field. */
   calibration: CalibrationData | null;
 }
@@ -38,19 +40,35 @@ export async function startWorkout(
   return {
     sessionId: started.value.sessionId,
     setId: started.value.setId,
+    setNumber: started.value.setNumber,
     calibration,
   };
 }
 
 /**
- * Close out a workout — persists reps + aggregates set/session totals.
- * Returning a `void` keeps the door open for future enrichments (analytics,
- * personal-best detection, push notifications) without churning callers.
+ * Flush the current set's reps and open the next set in the same session.
+ * Returns the new context (same sessionId, new setId + setNumber).
+ */
+export async function advanceSet(
+  ctx: WorkoutContext,
+  reps: RepInput[],
+  repo: SessionRepository = sessionRepository,
+): Promise<WorkoutContext> {
+  await repo.flushSet(ctx.setId, reps);
+  const next = await repo.startNextSet(ctx.sessionId, ctx.setNumber);
+  return { ...ctx, setId: next.setId, setNumber: next.setNumber };
+}
+
+/**
+ * Close out a workout — flushes the final set + rolls up session aggregates.
+ * Returning `void` keeps the door open for future enrichments (analytics,
+ * personal-best detection) without churning callers.
  */
 export async function finishWorkout(
-  ctx: { sessionId: string; setId: string },
+  ctx: WorkoutContext,
   reps: RepInput[],
   repo: SessionRepository = sessionRepository,
 ): Promise<void> {
-  await repo.finish(ctx.sessionId, ctx.setId, reps);
+  await repo.flushSet(ctx.setId, reps);
+  await repo.closeSession(ctx.sessionId);
 }

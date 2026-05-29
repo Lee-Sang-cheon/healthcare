@@ -3,9 +3,11 @@ import { supabase } from '@/lib/supabase/client';
 
 import type {
   RepInput,
+  SessionListItem,
   SessionRepository,
   SessionSummary,
   StartSessionResult,
+  StartSetResult,
 } from './SessionRepository';
 
 /**
@@ -31,19 +33,29 @@ export const supabaseSessionRepository: SessionRepository = {
       .single();
     if (setErr) throw setErr;
 
-    return { sessionId: session.id, setId: set.id };
+    return { sessionId: session.id, setId: set.id, setNumber: 1 };
   },
 
-  async finish(sessionId: string, setId: string, reps: RepInput[]): Promise<void> {
+  async startNextSet(sessionId: string, currentSetNumber: number): Promise<StartSetResult> {
+    const nextNumber = currentSetNumber + 1;
+    const { data: set, error } = await supabase
+      .from('sets')
+      .insert({ session_id: sessionId, set_number: nextNumber })
+      .select('id')
+      .single();
+    if (error) throw error;
+    return { setId: set.id, setNumber: nextNumber };
+  },
+
+  async flushSet(setId: string, reps: RepInput[]): Promise<void> {
     const totalReps = reps.length;
     const avgFormScore =
       totalReps > 0
         ? Number((reps.reduce((s, r) => s + r.formScore, 0) / totalReps).toFixed(2))
         : null;
-    const issueSet = new Set<RepInput['issues'][number]>();
+    const issueSet = new Set<string>();
     for (const r of reps) for (const i of r.issues) issueSet.add(i);
     const issuesDetected = Array.from(issueSet);
-    const endedAt = new Date().toISOString();
 
     if (totalReps > 0) {
       const repRows = reps.map((r) => ({
@@ -66,16 +78,37 @@ export const supabaseSessionRepository: SessionRepository = {
       })
       .eq('id', setId);
     if (setUpdErr) throw setUpdErr;
+  },
 
-    const { error: sessUpdErr } = await supabase
+  async closeSession(sessionId: string): Promise<void> {
+    // Aggregate over every set already flushed for this session.
+    const { data: sets, error: setsErr } = await supabase
+      .from('sets')
+      .select('reps, avg_form_score')
+      .eq('session_id', sessionId);
+    if (setsErr) throw setsErr;
+
+    let totalReps = 0;
+    let weightedScoreSum = 0;
+    let scoredReps = 0;
+    for (const s of sets ?? []) {
+      totalReps += s.reps ?? 0;
+      if (s.avg_form_score != null && s.reps) {
+        weightedScoreSum += s.avg_form_score * s.reps;
+        scoredReps += s.reps;
+      }
+    }
+    const avgFormScore = scoredReps > 0 ? Number((weightedScoreSum / scoredReps).toFixed(2)) : null;
+
+    const { error } = await supabase
       .from('sessions')
       .update({
-        ended_at: endedAt,
+        ended_at: new Date().toISOString(),
         total_reps: totalReps,
         avg_form_score: avgFormScore,
       })
       .eq('id', sessionId);
-    if (sessUpdErr) throw sessUpdErr;
+    if (error) throw error;
   },
 
   async getSummary(sessionId: string): Promise<SessionSummary> {
@@ -106,5 +139,16 @@ export const supabaseSessionRepository: SessionRepository = {
     }
 
     return { session, sets: sets ?? [], reps };
+  },
+
+  async listRecent(limit = 20): Promise<SessionListItem[]> {
+    // RLS confines this to the signed-in user's own sessions.
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('id, exercise_type, started_at, ended_at, total_reps, avg_form_score')
+      .order('started_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data ?? [];
   },
 };

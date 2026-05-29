@@ -14,7 +14,7 @@ import type { ExerciseModule } from '@/features/exercises/types';
 import type { PoseFrame } from '@/features/pose/keypoints';
 import { PoseCameraView } from '@/features/pose/PoseCameraView';
 import { SkeletonOverlay } from '@/features/pose/SkeletonOverlay';
-import { finishWorkout, startWorkout, type WorkoutContext } from '@/features/workout/useCases';
+import { advanceSet, finishWorkout, startWorkout, type WorkoutContext } from '@/features/workout/useCases';
 import { useTheme } from '@/hooks/use-theme';
 
 /** Overlay re-render cadence (ms). Analyzer still runs at full camera fps. */
@@ -43,11 +43,12 @@ function ActiveWorkout({ mod }: { mod: ExerciseModule }) {
   const router = useRouter();
   const theme = useTheme();
   const [ctx, setCtx] = useState<WorkoutContext | null>(null);
-  const { state, onPose, getAllReps } = mod.useRuntime({
+  const { state, onPose, getAllReps, reset } = mod.useRuntime({
     calibration: ctx?.calibration ?? null,
   });
   const [overlayPose, setOverlayPose] = useState<PoseFrame | null>(null);
   const [saving, setSaving] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const lastOverlayTs = useRef(0);
 
@@ -91,6 +92,32 @@ function ActiveWorkout({ mod }: { mod: ExerciseModule }) {
     [onPose],
   );
 
+  const collectReps = useCallback(
+    () =>
+      getAllReps().map((r) => ({
+        repNumber: r.repNumber,
+        formScore: r.formScore,
+        issues: r.issues,
+        durationMs: r.durationMs,
+      })),
+    [getAllReps],
+  );
+
+  const handleNextSet = useCallback(async () => {
+    if (advancing || saving || !ctx) return;
+    setAdvancing(true);
+    try {
+      const next = await advanceSet(ctx, collectReps());
+      setCtx(next);
+      reset();
+    } catch (err) {
+      console.warn('advanceSet failed', err);
+      setErrorMsg('다음 세트 시작 실패 — 다시 시도하세요.');
+    } finally {
+      setAdvancing(false);
+    }
+  }, [advancing, collectReps, ctx, reset, saving]);
+
   const handleEnd = useCallback(async () => {
     if (saving) return;
     if (!ctx) {
@@ -98,21 +125,15 @@ function ActiveWorkout({ mod }: { mod: ExerciseModule }) {
       return;
     }
     setSaving(true);
-    const reps = getAllReps().map((r) => ({
-      repNumber: r.repNumber,
-      formScore: r.formScore,
-      issues: r.issues,
-      durationMs: r.durationMs,
-    }));
     try {
-      await finishWorkout(ctx, reps);
+      await finishWorkout(ctx, collectReps());
       router.replace({ pathname: '/report/[sessionId]', params: { sessionId: ctx.sessionId } });
     } catch (err) {
       console.warn('finishWorkout failed', err);
       setSaving(false);
       setErrorMsg('저장 실패 — 다시 시도하거나 종료를 한번 더 누르면 홈으로 돌아갑니다.');
     }
-  }, [ctx, getAllReps, router, saving]);
+  }, [collectReps, ctx, router, saving]);
 
   const bandColor =
     state.formColor === 'good'
@@ -138,20 +159,39 @@ function ActiveWorkout({ mod }: { mod: ExerciseModule }) {
         <View style={styles.topBar}>
           <ThemedView style={[styles.chip, { backgroundColor: theme.background + 'CC' }]}>
             <ThemedText type="caption" themeColor="textSecondary">
-              {mod.meta.name} · 1세트
+              {mod.meta.name} · {ctx?.setNumber ?? 1}세트
             </ThemedText>
           </ThemedView>
-          <Pressable
-            onPress={handleEnd}
-            disabled={saving}
-            style={[styles.chip, { backgroundColor: theme.background + 'CC', opacity: saving ? 0.6 : 1 }]}
-          >
-            {saving ? (
-              <ActivityIndicator color={theme.textSecondary} size="small" />
-            ) : (
-              <ThemedText type="small" themeColor="textSecondary">종료</ThemedText>
-            )}
-          </Pressable>
+          <View style={styles.actions}>
+            <Pressable
+              onPress={handleNextSet}
+              disabled={advancing || saving || !ctx || state.reps === 0}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: theme.background + 'CC',
+                  opacity: advancing || saving || !ctx || state.reps === 0 ? 0.5 : 1,
+                },
+              ]}
+            >
+              {advancing ? (
+                <ActivityIndicator color={theme.textSecondary} size="small" />
+              ) : (
+                <ThemedText type="small" themeColor="textSecondary">다음 세트</ThemedText>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={handleEnd}
+              disabled={saving || advancing}
+              style={[styles.chip, { backgroundColor: theme.background + 'CC', opacity: saving ? 0.6 : 1 }]}
+            >
+              {saving ? (
+                <ActivityIndicator color={theme.textSecondary} size="small" />
+              ) : (
+                <ThemedText type="small" themeColor="textSecondary">종료</ThemedText>
+              )}
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.center}>
@@ -203,5 +243,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
     borderRadius: Radius.pill,
   },
+  actions: { flexDirection: 'row', gap: Spacing.two, alignItems: 'center' },
   center: { alignItems: 'center', justifyContent: 'center', flex: 1, gap: Spacing.two },
 });

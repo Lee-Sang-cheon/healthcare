@@ -7,9 +7,11 @@
 
 export type {
   RepInput,
+  SessionListItem,
   SessionRepository,
   SessionSummary,
   StartSessionResult,
+  StartSetResult,
 } from './SessionRepository';
 
 import { supabaseSessionRepository } from './SupabaseSessionRepository';
