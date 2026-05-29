@@ -1,4 +1,4 @@
-import type { SquatCalibration } from '@/features/calibration/calibrationApi';
+import type { CalibrationData } from '@/features/calibration/calibrationApi';
 import type { PoseFrame } from '@/features/pose/keypoints';
 
 /**
@@ -45,10 +45,11 @@ export interface ExerciseRuntime<TIssue extends string = string> {
 
 export interface ExerciseRuntimeOptions {
   /**
-   * Personal calibration. Currently squat-shaped; widen this union as more
-   * exercises grow calibration data.
+   * Full calibration payload. Each module pulls its own slice
+   * (`calibration?.squat`, `calibration?.pushup`, ...) — keeps the runtime
+   * factory exercise-agnostic.
    */
-  calibration: SquatCalibration | null;
+  calibration: CalibrationData | null;
 }
 
 export interface ExerciseModule<TIssue extends string = string> {

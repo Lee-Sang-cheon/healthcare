@@ -17,7 +17,7 @@ export const squatModule: ExerciseModule<SquatIssue> = {
     enabled: true,
   },
   useRuntime: ({ calibration }) => {
-    const { state, onPose, getAllReps } = useSquatSession({ calibration });
+    const { state, onPose, getAllReps } = useSquatSession({ calibration: calibration?.squat ?? null });
     return { state, onPose, getAllReps };
   },
   issueLabels: SQUAT_ISSUE_LABELS,

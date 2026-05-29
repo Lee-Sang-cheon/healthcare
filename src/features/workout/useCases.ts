@@ -1,4 +1,4 @@
-import type { SquatCalibration } from '@/features/calibration/calibrationApi';
+import type { CalibrationData } from '@/features/calibration/calibrationApi';
 import { getCalibration } from '@/features/calibration/calibrationApi';
 import { sessionRepository, type RepInput, type SessionRepository } from '@/features/sessions';
 
@@ -14,8 +14,8 @@ import { sessionRepository, type RepInput, type SessionRepository } from '@/feat
 export interface WorkoutContext {
   sessionId: string;
   setId: string;
-  /** May be null for first-time users who haven't calibrated yet. */
-  calibration: SquatCalibration | null;
+  /** Full calibration payload; modules pick their own field. */
+  calibration: CalibrationData | null;
 }
 
 /**
@@ -33,8 +33,7 @@ export async function startWorkout(
   ]);
 
   if (started.status === 'rejected') throw started.reason;
-  const calibration =
-    calRes.status === 'fulfilled' ? calRes.value.squat ?? null : null;
+  const calibration = calRes.status === 'fulfilled' ? calRes.value : null;
 
   return {
     sessionId: started.value.sessionId,

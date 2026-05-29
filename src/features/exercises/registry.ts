@@ -1,10 +1,11 @@
+import { pushupModule } from './pushup';
 import { squatModule } from './squat';
 import type { ExerciseMeta, ExerciseModule } from './types';
 
 /**
  * Single source of truth for which exercises the app supports.
- * V1 MVP ships with squat only — disabled placeholders live as plain
- * {@link ExerciseMeta}s until their real modules ship.
+ * Each enabled exercise lives as a full {@link ExerciseModule}; disabled
+ * placeholders are plain {@link ExerciseMeta}s.
  */
 
 const placeholderMetas: ExerciseMeta[] = [
@@ -15,16 +16,9 @@ const placeholderMetas: ExerciseMeta[] = [
     primaryCameraAngle: 'side',
     enabled: false,
   },
-  {
-    id: 'pushup',
-    name: '푸시업',
-    shortDescription: '엉덩이 처짐과 팔꿈치 각도를 분석합니다.',
-    primaryCameraAngle: 'side',
-    enabled: false,
-  },
 ];
 
-const modules: ExerciseModule[] = [squatModule];
+const modules: ExerciseModule[] = [squatModule, pushupModule];
 
 /** Metadata for catalog screens (enabled + disabled, in display order). */
 export const exercises: ExerciseMeta[] = [
