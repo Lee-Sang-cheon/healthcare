@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ErrorBanner } from '@/components/error-banner';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { getCalibration, type SquatCalibration } from '@/features/calibration/calibrationApi';
@@ -39,6 +40,7 @@ export default function SetupScreen() {
   const [checks, setChecks] = useState<AlignmentChecks>(INITIAL_CHECKS);
   const [stableReady, setStableReady] = useState(false);
   const [calibration, setCalibration] = useState<SquatCalibration | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const readySinceRef = useRef<number | null>(null);
   const lastCheckTs = useRef(0);
 
@@ -55,7 +57,11 @@ export default function SetupScreen() {
       .then((c) => {
         if (!cancelled && c.squat) setCalibration(c.squat);
       })
-      .catch((err) => console.warn('getCalibration failed', err));
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('getCalibration failed', err);
+        setErrorMsg('내 체형 정보를 불러오지 못했습니다. 기본 설정으로 진행합니다.');
+      });
     return () => {
       cancelled = true;
     };
@@ -101,6 +107,7 @@ export default function SetupScreen() {
 
       <PoseCameraView active={true} onPose={handlePose} />
       <SkeletonOverlay pose={overlayPose} color={overlayColor} />
+      <ErrorBanner message={errorMsg} onDismiss={() => setErrorMsg(null)} />
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
         <View style={styles.topBar}>

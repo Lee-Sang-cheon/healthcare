@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ErrorBanner } from '@/components/error-banner';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -47,6 +48,7 @@ function ActiveWorkout({ mod }: { mod: ExerciseModule }) {
   });
   const [overlayPose, setOverlayPose] = useState<PoseFrame | null>(null);
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const lastOverlayTs = useRef(0);
 
   useKeepAwake('workout');
@@ -66,7 +68,11 @@ function ActiveWorkout({ mod }: { mod: ExerciseModule }) {
         if (!cancelled) setCtx(next);
       })
       .catch((err) => {
+        if (cancelled) return;
         console.warn('startWorkout failed; workout will run without saving.', err);
+        setErrorMsg(
+          '세션 시작 실패 — 운동은 계속할 수 있지만 결과가 저장되지 않습니다.',
+        );
       });
     return () => {
       cancelled = true;
@@ -103,7 +109,8 @@ function ActiveWorkout({ mod }: { mod: ExerciseModule }) {
       router.replace({ pathname: '/report/[sessionId]', params: { sessionId: ctx.sessionId } });
     } catch (err) {
       console.warn('finishWorkout failed', err);
-      router.replace('/');
+      setSaving(false);
+      setErrorMsg('저장 실패 — 다시 시도하거나 종료를 한번 더 누르면 홈으로 돌아갑니다.');
     }
   }, [ctx, getAllReps, router, saving]);
 
@@ -122,6 +129,7 @@ function ActiveWorkout({ mod }: { mod: ExerciseModule }) {
 
       <PoseCameraView active={true} onPose={handlePose} />
       <SkeletonOverlay pose={overlayPose} color={bandColor} />
+      <ErrorBanner message={errorMsg} onDismiss={() => setErrorMsg(null)} />
 
       {/* Form-status border band — sits on top of camera feed */}
       <View style={[styles.statusBand, { borderColor: bandColor }]} pointerEvents="none" />

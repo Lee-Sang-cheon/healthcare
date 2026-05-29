@@ -42,6 +42,7 @@ export function PoseCameraView({ active, onPose }: Props) {
     return (
       <View style={[styles.center, { backgroundColor: theme.backgroundElement }]}>
         <ActivityIndicator color={theme.accent} />
+        <ThemedText type="small" themeColor="textSecondary">카메라 준비중...</ThemedText>
       </View>
     );
   }
@@ -58,13 +59,25 @@ export function PoseCameraView({ active, onPose }: Props) {
   }
 
   return (
-    <Camera
-      style={StyleSheet.absoluteFill}
-      device={device}
-      isActive={active}
-      frameProcessor={frameProcessor}
-      pixelFormat="rgb"
-    />
+    <>
+      <Camera
+        style={StyleSheet.absoluteFill}
+        device={device}
+        isActive={active}
+        frameProcessor={frameProcessor}
+        pixelFormat="rgb"
+      />
+      {modelState === 'loading' && (
+        <View style={styles.loadingOverlay} pointerEvents="none">
+          <View style={[styles.loadingPill, { backgroundColor: theme.background + 'D9' }]}>
+            <ActivityIndicator color={theme.accent} size="small" />
+            <ThemedText type="small" themeColor="textSecondary">
+              자세 인식 모델 로딩중...
+            </ThemedText>
+          </View>
+        </View>
+      )}
+    </>
   );
 }
 
@@ -84,5 +97,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.three,
     borderRadius: Radius.md,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: Spacing.four,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  loadingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.pill,
   },
 });

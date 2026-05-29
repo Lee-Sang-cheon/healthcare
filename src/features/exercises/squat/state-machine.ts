@@ -84,14 +84,19 @@ export function createSquatAnalyzer(callbacks: AnalyzerCallbacks = {}, options: 
       state.worst = { ...curr };
       return;
     }
-    // For each metric, keep the "worse" value (deeper bad).
+    // For each metric, keep the value that represents the rep's worst moment.
+    // Knee angles: track the *minimum* (= deepest bend reached). The downstream
+    // shallow-depth check is `worst.kneeAngle > shallowDepthBelow`, i.e. "even
+    // at your deepest, were you still shallow?". Tracking max here would let
+    // the ascent/standing frames (always ~180°) overwrite the real depth.
+    // Hip angle is the same story.
+    // Trunk tilt / asymmetry / cave: bigger = worse, so max-track is correct.
     state.worst = {
       reliable: state.worst.reliable && curr.reliable,
-      // for knee angle, higher = shallower = worse
-      kneeAngle: Math.max(state.worst.kneeAngle, curr.kneeAngle),
-      leftKneeAngle: Math.max(state.worst.leftKneeAngle, curr.leftKneeAngle),
-      rightKneeAngle: Math.max(state.worst.rightKneeAngle, curr.rightKneeAngle),
-      hipAngle: Math.max(state.worst.hipAngle, curr.hipAngle),
+      kneeAngle: Math.min(state.worst.kneeAngle, curr.kneeAngle),
+      leftKneeAngle: Math.min(state.worst.leftKneeAngle, curr.leftKneeAngle),
+      rightKneeAngle: Math.min(state.worst.rightKneeAngle, curr.rightKneeAngle),
+      hipAngle: Math.min(state.worst.hipAngle, curr.hipAngle),
       trunkTilt: Math.max(state.worst.trunkTilt, curr.trunkTilt),
       kneeAsymmetry: Math.max(state.worst.kneeAsymmetry, curr.kneeAsymmetry),
       kneeCaveIndex: Math.max(state.worst.kneeCaveIndex, curr.kneeCaveIndex),
